@@ -14,27 +14,46 @@ function Save-PngAsIco {
         [string]$IcoPath
     )
 
-    [byte[]]$pngBytes = [System.IO.File]::ReadAllBytes($PngPath)
+    $sourceBitmap = [System.Drawing.Image]::FromFile($PngPath)
+    $resizedBitmap = New-Object System.Drawing.Bitmap 256, 256, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    $graphics = [System.Drawing.Graphics]::FromImage($resizedBitmap)
+    $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
+    $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+    $graphics.Clear([System.Drawing.Color]::Transparent)
+    $graphics.DrawImage($sourceBitmap, 0, 0, 256, 256)
 
-    $fs = [System.IO.File]::Create($IcoPath)
+    $memory = New-Object System.IO.MemoryStream
     try {
-        $writer = New-Object System.IO.BinaryWriter($fs)
-        $writer.Write([UInt16]0)
-        $writer.Write([UInt16]1)
-        $writer.Write([UInt16]1)
-        $writer.Write([byte]0)
-        $writer.Write([byte]0)
-        $writer.Write([byte]0)
-        $writer.Write([byte]0)
-        $writer.Write([UInt16]1)
-        $writer.Write([UInt16]32)
-        $writer.Write([UInt32]$pngBytes.Length)
-        $writer.Write([UInt32]22)
-        $writer.Write($pngBytes)
-        $writer.Flush()
+        $resizedBitmap.Save($memory, [System.Drawing.Imaging.ImageFormat]::Png)
+        [byte[]]$pngBytes = $memory.ToArray()
+
+        $fs = [System.IO.File]::Create($IcoPath)
+        try {
+            $writer = New-Object System.IO.BinaryWriter($fs)
+            $writer.Write([UInt16]0)
+            $writer.Write([UInt16]1)
+            $writer.Write([UInt16]1)
+            $writer.Write([byte]0)
+            $writer.Write([byte]0)
+            $writer.Write([byte]0)
+            $writer.Write([byte]0)
+            $writer.Write([UInt16]1)
+            $writer.Write([UInt16]32)
+            $writer.Write([UInt32]$pngBytes.Length)
+            $writer.Write([UInt32]22)
+            $writer.Write($pngBytes)
+            $writer.Flush()
+        }
+        finally {
+            $fs.Dispose()
+        }
     }
     finally {
-        $fs.Dispose()
+        $memory.Dispose()
+        $graphics.Dispose()
+        $resizedBitmap.Dispose()
+        $sourceBitmap.Dispose()
     }
 }
 

@@ -8,9 +8,9 @@ using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-[assembly: System.Reflection.AssemblyVersion("1.5.0.0")]
-[assembly: AssemblyFileVersion("1.5.0.0")]
-[assembly: AssemblyInformationalVersion("1.5.0")]
+[assembly: System.Reflection.AssemblyVersion("1.5.1.0")]
+[assembly: AssemblyFileVersion("1.5.1.0")]
+[assembly: AssemblyInformationalVersion("1.5.1")]
 
 internal static class Program
 {
@@ -127,6 +127,7 @@ internal sealed class TrayContext : ApplicationContext
     private const string StartupValueName = Program.AppName;
     private const string LidSettingsArguments = "/name Microsoft.PowerOptions /page pageGlobalSettings";
     private const int BalloonTimeoutMs = 2500;
+    private const int CleanupDeleteRetryCount = 20;
 
     private readonly NotifyIcon notifyIcon;
     private readonly ContextMenuStrip menu;
@@ -376,18 +377,38 @@ internal sealed class TrayContext : ApplicationContext
             throw new InvalidOperationException("Refusing to remove the app because it is not running from LocalAppData.");
         }
 
-        var cleanupCommand = string.Format(
-            "/c ping 127.0.0.1 -n 3 > nul && del /f /q \"{0}\" && rmdir /s /q \"{1}\"",
-            exePath,
-            installedDir);
+        var cleanupScriptPath = Path.Combine(
+            Path.GetTempPath(),
+            Program.AppName + "-uninstall-" + Guid.NewGuid().ToString("N") + ".cmd");
+
+        File.WriteAllText(cleanupScriptPath, BuildCleanupScript(exePath, installedDir));
 
         Process.Start(new ProcessStartInfo
         {
             FileName = "cmd.exe",
-            Arguments = cleanupCommand,
+            Arguments = "/c call \"" + cleanupScriptPath + "\"",
             UseShellExecute = false,
-            CreateNoWindow = true
+            CreateNoWindow = true,
+            WorkingDirectory = Path.GetTempPath()
         });
+    }
+
+    private static string BuildCleanupScript(string exePath, string installedDir)
+    {
+        return string.Join(
+            Environment.NewLine,
+            "@echo off",
+            "setlocal",
+            "set \"TARGET_EXE=" + exePath + "\"",
+            "set \"TARGET_DIR=" + installedDir + "\"",
+            "for /L %%I in (1,1," + CleanupDeleteRetryCount + ") do (",
+            "  del /f /q \"%TARGET_EXE%\" >nul 2>nul",
+            "  rmdir /s /q \"%TARGET_DIR%\" >nul 2>nul",
+            "  if not exist \"%TARGET_DIR%\" goto done",
+            "  ping 127.0.0.1 -n 2 >nul",
+            ")",
+            ":done",
+            "del /f /q \"%~f0\" >nul 2>nul");
     }
 
     private void ApplyTrayState(int actionValue)
