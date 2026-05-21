@@ -8,9 +8,9 @@ using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-[assembly: System.Reflection.AssemblyVersion("1.5.1.0")]
-[assembly: AssemblyFileVersion("1.5.1.0")]
-[assembly: AssemblyInformationalVersion("1.5.1")]
+[assembly: System.Reflection.AssemblyVersion("1.6.0.0")]
+[assembly: AssemblyFileVersion("1.6.0.0")]
+[assembly: AssemblyInformationalVersion("1.6.0")]
 
 internal static class Program
 {
@@ -18,6 +18,9 @@ internal static class Program
     private const string MutexName = @"Local\CloseCaseLid";
     private const string AppFolderName = "CloseCaseLid";
     private const string ExeFileName = "CloseCaseLid.exe";
+    private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    private const string StartupValueName = AppName;
+    internal static string StartupRegistrationWarning { get; private set; }
 
     [STAThread]
     private static void Main()
@@ -32,6 +35,7 @@ internal static class Program
                 return;
             }
 
+            TryEnsureStartupEnabled();
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new TrayContext());
@@ -46,6 +50,66 @@ internal static class Program
     internal static string InstalledExePath
     {
         get { return Path.Combine(InstalledDirectoryPath, ExeFileName); }
+    }
+
+    internal static void EnsureStartupEnabled()
+    {
+        using (var key = Registry.CurrentUser.OpenSubKey(RunKeyPath, true))
+        {
+            if (key == null)
+            {
+                throw new InvalidOperationException("Could not open the startup registry key.");
+            }
+
+            key.SetValue(StartupValueName, "\"" + InstalledExePath + "\"");
+        }
+    }
+
+    internal static void RemoveStartupEntry()
+    {
+        using (var key = Registry.CurrentUser.OpenSubKey(RunKeyPath, true))
+        {
+            if (key == null)
+            {
+                throw new InvalidOperationException("Could not open the startup registry key.");
+            }
+
+            key.DeleteValue(StartupValueName, false);
+        }
+    }
+
+    internal static bool IsStartupEnabled()
+    {
+        try
+        {
+            using (var key = Registry.CurrentUser.OpenSubKey(RunKeyPath, false))
+            {
+                if (key == null)
+                {
+                    return false;
+                }
+
+                var value = key.GetValue(StartupValueName) as string;
+                return !string.IsNullOrWhiteSpace(value) && value.IndexOf(InstalledExePath, StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static void TryEnsureStartupEnabled()
+    {
+        try
+        {
+            EnsureStartupEnabled();
+            StartupRegistrationWarning = null;
+        }
+        catch (Exception ex)
+        {
+            StartupRegistrationWarning = "Auto start could not be enabled: " + ex.Message;
+        }
     }
 
     private static void EnsureRunningFromInstalledLocation()
@@ -123,8 +187,6 @@ internal static class Program
 
 internal sealed class TrayContext : ApplicationContext
 {
-    private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private const string StartupValueName = Program.AppName;
     private const string LidSettingsArguments = "/name Microsoft.PowerOptions /page pageGlobalSettings";
     private const int BalloonTimeoutMs = 2500;
     private const int CleanupDeleteRetryCount = 20;
@@ -139,8 +201,6 @@ internal sealed class TrayContext : ApplicationContext
     private readonly ToolStripMenuItem sleepMenuItem;
     private readonly ToolStripMenuItem doNothingMenuItem;
     private readonly ToolStripMenuItem openSettingsMenuItem;
-    private readonly ToolStripMenuItem addStartupMenuItem;
-    private readonly ToolStripMenuItem removeStartupMenuItem;
     private readonly ToolStripMenuItem uninstallMenuItem;
 
     public TrayContext()
@@ -154,8 +214,6 @@ internal sealed class TrayContext : ApplicationContext
         sleepMenuItem = CreateMenuItem("Sleep on lid close", delegate { SetLidAction(1, "Sleep"); });
         doNothingMenuItem = CreateMenuItem("Do nothing on lid close", delegate { SetLidAction(0, "Do nothing"); });
         openSettingsMenuItem = CreateMenuItem("Open lid settings", OpenLidSettings);
-        addStartupMenuItem = CreateMenuItem("Add to auto start", delegate { SetStartupEnabled(true); });
-        removeStartupMenuItem = CreateMenuItem("Remove from auto start", delegate { SetStartupEnabled(false); });
         uninstallMenuItem = CreateMenuItem("Uninstall", UninstallApplication);
         var exitMenuItem = CreateMenuItem("Exit", ExitThread);
 
@@ -168,9 +226,6 @@ internal sealed class TrayContext : ApplicationContext
             doNothingMenuItem,
             new ToolStripSeparator(),
             openSettingsMenuItem,
-            new ToolStripSeparator(),
-            addStartupMenuItem,
-            removeStartupMenuItem,
             uninstallMenuItem,
             new ToolStripSeparator(),
             exitMenuItem
@@ -189,7 +244,14 @@ internal sealed class TrayContext : ApplicationContext
         notifyIcon.MouseUp += NotifyIcon_MouseUp;
 
         RefreshState();
-        ShowBalloon(Program.AppName, "Running in the system tray.");
+        if (string.IsNullOrWhiteSpace(Program.StartupRegistrationWarning))
+        {
+            ShowBalloon(Program.AppName, "Running in the system tray.");
+        }
+        else
+        {
+            ShowBalloon(Program.AppName, Program.StartupRegistrationWarning);
+        }
     }
 
     protected override void ExitThreadCore()
@@ -267,37 +329,6 @@ internal sealed class TrayContext : ApplicationContext
         }
     }
 
-    private void SetStartupEnabled(bool enabled)
-    {
-        try
-        {
-            using (var key = Registry.CurrentUser.OpenSubKey(RunKeyPath, true))
-            {
-                if (key == null)
-                {
-                    throw new InvalidOperationException("Could not open the startup registry key.");
-                }
-
-                if (enabled)
-                {
-                    key.SetValue(StartupValueName, "\"" + Program.InstalledExePath + "\"");
-                    ShowBalloon("Startup", "Tray app will start when you sign in.");
-                }
-                else
-                {
-                    key.DeleteValue(StartupValueName, false);
-                    ShowBalloon("Startup", "Tray app removed from sign-in startup.");
-                }
-            }
-
-            RefreshState();
-        }
-        catch (Exception ex)
-        {
-            ShowError(ex);
-        }
-    }
-
     private void OpenLidSettings()
     {
         try
@@ -331,8 +362,22 @@ internal sealed class TrayContext : ApplicationContext
 
         try
         {
-            SetStartupEnabled(false);
+            string startupRemovalWarning = null;
+
+            try
+            {
+                Program.RemoveStartupEntry();
+            }
+            catch (Exception ex)
+            {
+                startupRemovalWarning = "Startup entry cleanup failed: " + ex.Message;
+            }
+
             ScheduleInstalledFilesDeletion();
+            if (!string.IsNullOrWhiteSpace(startupRemovalWarning))
+            {
+                ShowBalloon(Program.AppName, startupRemovalWarning);
+            }
             ExitThread();
         }
         catch (Exception ex)
@@ -344,12 +389,10 @@ internal sealed class TrayContext : ApplicationContext
     private void RefreshState()
     {
         var state = GetLidActionState();
-        var startupEnabled = IsStartupEnabled();
+        var startupEnabled = Program.IsStartupEnabled();
 
         sleepMenuItem.Checked = state.AC == 1 && state.DC == 1;
         doNothingMenuItem.Checked = state.AC == 0 && state.DC == 0;
-        addStartupMenuItem.Visible = !startupEnabled;
-        removeStartupMenuItem.Visible = startupEnabled;
 
         if (state.AC == state.DC)
         {
@@ -358,7 +401,7 @@ internal sealed class TrayContext : ApplicationContext
         else
         {
             notifyIcon.Icon = unknownIcon;
-            notifyIcon.Text = "Lid close: Mixed AC/DC";
+            notifyIcon.Text = startupEnabled ? "Lid close: Mixed AC/DC" : "Lid close: Mixed";
         }
     }
 
@@ -464,20 +507,6 @@ internal sealed class TrayContext : ApplicationContext
             stream.CopyTo(memory);
             memory.Position = 0;
             return new Icon(memory);
-        }
-    }
-
-    private bool IsStartupEnabled()
-    {
-        using (var key = Registry.CurrentUser.OpenSubKey(RunKeyPath, false))
-        {
-            if (key == null)
-            {
-                return false;
-            }
-
-            var value = key.GetValue(StartupValueName) as string;
-            return !string.IsNullOrWhiteSpace(value) && value.IndexOf(Program.InstalledExePath, StringComparison.OrdinalIgnoreCase) >= 0;
         }
     }
 

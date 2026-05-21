@@ -7,16 +7,26 @@ set "RUNTIME=%~1"
 if "%RUNTIME%"=="" set "RUNTIME=win-x64"
 set "PROJECT=%ROOT%CloseCaseLid.csproj"
 set "PUBLISH_DIR=%ROOT%publish-self-contained"
+set "DOTNET="
 
-where dotnet >nul 2>nul
-if errorlevel 1 (
-  echo dotnet CLI is not installed. Install a .NET SDK first.
+if exist "%ROOT%.dotnet\dotnet.exe" (
+  set "DOTNET=%ROOT%.dotnet\dotnet.exe"
+)
+
+if not defined DOTNET (
+  for /f "delims=" %%P in ('where dotnet 2^>nul') do (
+    if not defined DOTNET set "DOTNET=%%~fP"
+  )
+)
+
+if not defined DOTNET (
+  echo Could not find dotnet. Install a .NET SDK or add a repo-local ".dotnet\dotnet.exe".
   exit /b 1
 )
 
-for /f %%i in ('dotnet --list-sdks') do set "HAS_SDK=1"
+for /f %%i in ('"%DOTNET%" --list-sdks') do set "HAS_SDK=1"
 if not defined HAS_SDK (
-  echo dotnet is installed but no .NET SDK was found.
+  echo dotnet was found at "%DOTNET%" but no .NET SDK was available.
   exit /b 1
 )
 
@@ -25,7 +35,7 @@ if exist "%ICON_DIR%convert-user-icons.ps1" (
   if errorlevel 1 exit /b 1
 )
 
-dotnet publish "%PROJECT%" ^
+"%DOTNET%" publish "%PROJECT%" ^
   -c Release ^
   -r %RUNTIME% ^
   --self-contained true ^
