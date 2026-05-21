@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>false</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <AssemblyName>CloseCaseLid</AssemblyName>
+    <RootNamespace>CloseCaseLid</RootNamespace>
+    <ApplicationIcon>icons\icon-sleep.ico</ApplicationIcon>
+    <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <EmbeddedResource Include="icons\icon-sleep.ico" LogicalName="CloseCaseLid.icon-sleep.ico" />
+    <EmbeddedResource Include="icons\icon-do-nothing.ico" LogicalName="CloseCaseLid.icon-do-nothing.ico" />
+    <EmbeddedResource Include="icons\icon-unknown.ico" LogicalName="CloseCaseLid.icon-unknown.ico" />
+  </ItemGroup>
+</Project>
