@@ -8,6 +8,8 @@ CloseCaseLid exists for one very specific Windows annoyance: sometimes closing t
 
 This app lives in the system tray and lets you switch lid-close behavior in one click between `Sleep on lid close` and `Do nothing on lid close`. It also provides quick access to the classic lid settings page, startup options, and uninstall.
 
+Latest builds are available on the [GitHub Releases page](https://github.com/limonspb/CloseCaseLid/releases/).
+
 ## How To Use
 
 Double-click `CloseCaseLid.exe`.
