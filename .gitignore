@@ -3,6 +3,8 @@ CloseCaseLid.exe
 publish-self-contained/
 bin/
 obj/
+.dotnet/
+dotnet-install.ps1
 
 # Visual Studio / MSBuild
 .vs/

@@ -5,9 +5,11 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>false</ImplicitUsings>
     <Nullable>disable</Nullable>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <AssemblyName>CloseCaseLid</AssemblyName>
     <RootNamespace>CloseCaseLid</RootNamespace>
     <ApplicationIcon>icons\icon-sleep.ico</ApplicationIcon>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
   </PropertyGroup>
 
